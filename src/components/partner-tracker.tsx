@@ -23,7 +23,8 @@ import {
   LayoutGrid,
   LoaderCircle,
   LogOut,
-  Mail,
+  Eye,
+  EyeOff,
   Pencil,
   MessageSquareText,
   Network,
@@ -953,6 +954,11 @@ function Workspace({
                                   <button
                                     className={`icon-button${partner.is_unread ? " is-unread" : ""}`}
                                     aria-label={`Mark ${partner.first_name} as ${partner.is_unread ? "read" : "unread"}`}
+                                    title={
+                                      partner.is_unread
+                                        ? "Mark as read"
+                                        : "Mark as unread"
+                                    }
                                     disabled={pendingIds.includes(partner.id)}
                                     onClick={() =>
                                       void patch(
@@ -964,7 +970,11 @@ function Workspace({
                                       )
                                     }
                                   >
-                                    <Mail size={16} />
+                                    {partner.is_unread ? (
+                                      <Eye size={17} />
+                                    ) : (
+                                      <EyeOff size={17} />
+                                    )}
                                   </button>
                                   <button
                                     className="icon-button"
