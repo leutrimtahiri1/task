@@ -110,7 +110,10 @@ LinkedIn, or WhatsApp messages.
 
 ## Discover leads
 
-Open **Discover leads** (`/search`). Enter a business search and optionally
+Open **Discover leads** (`/search`) and choose **Search with AI** to use the
+existing research flow. **Search with LinkedIn** opens LinkedIn people search
+in a new tab. **Search with Apollo** is disabled and marked **Coming soon**.
+For AI research, enter a business search and optionally
 choose partner type, market served, and insurance product. The authenticated
 server calls Gemini's Interactions API with the Google Search tool enabled.
 Findings include source links, Google's associated search suggestions, and a

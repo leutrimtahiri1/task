@@ -2702,3 +2702,102 @@ tr.unread-row td {
     flex-wrap: wrap;
   }
 }
+
+.discovery-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.discovery-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #e4deec;
+  border-radius: 10px;
+  background: white;
+  color: #776585;
+  text-align: left;
+  text-decoration: none;
+  transition:
+    border-color 0.16s,
+    background 0.16s;
+}
+.discovery-option.selected {
+  border-color: #b59ad9;
+  background: #f8f4fd;
+}
+.discovery-option:not(:disabled):hover {
+  border-color: #ab8bd0;
+  background: #faf7fe;
+}
+.discovery-option-icon {
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border-radius: 10px;
+  background: #efe7fa;
+  color: #8560b0;
+  flex-shrink: 0;
+}
+.linkedin-option .discovery-option-icon {
+  background: #eaf2fc;
+  color: #3c76ad;
+}
+.discovery-option-copy {
+  flex: 1;
+  min-width: 130px;
+}
+.discovery-option-copy strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #61516e;
+}
+.discovery-option-copy > span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.7;
+  margin-top: 5px;
+  color: #81728d;
+}
+.discovery-option-badge {
+  display: inline-block;
+  border: 1px solid #e7def0;
+  border-radius: 5px;
+  padding: 3px 6px;
+  font-size: 9px;
+  line-height: 1.5;
+  color: #8969a6;
+  background: #f3edf9;
+}
+.discovery-option:disabled {
+  opacity: 1;
+  background: #f5f5f8;
+  border-color: #e9e7ee;
+  cursor: not-allowed;
+}
+.discovery-option:disabled .discovery-option-icon {
+  color: #99909f;
+  background: #eae7ef;
+}
+.discovery-option:disabled .discovery-option-copy strong,
+.discovery-option:disabled .discovery-option-copy > span {
+  color: #8d8596;
+}
+.discovery-option:disabled .discovery-option-badge {
+  color: #82788d;
+  background: #eeebf3;
+}
+@media (max-width: 1000px) {
+  .discovery-options {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .discovery-option {
+    padding: 15px;
+  }
+}

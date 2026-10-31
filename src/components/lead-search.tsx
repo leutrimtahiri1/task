@@ -6,6 +6,7 @@ import Markdown from "react-markdown";
 import DOMPurify from "dompurify";
 import {
   ArrowRight,
+  Building2,
   ExternalLink,
   Globe2,
   Info,
@@ -13,6 +14,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Users,
 } from "lucide-react";
 import { aiRequest } from "@/lib/ai-client";
 import {
@@ -22,6 +24,7 @@ import {
 } from "@/lib/outreach";
 
 export function LeadSearch() {
+  const searchInput = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [partnerType, setPartnerType] =
     useState<SearchInput["partnerType"]>("any");
@@ -67,12 +70,55 @@ export function LeadSearch() {
             <span /> FIND YOUR NEXT PARTNERSHIP
           </div>
           <h1>Discover potential partners</h1>
-          <p>Research lead vendors and BPO centers using public web sources.</p>
+          <p>Choose how to find your next lead vendor or BPO partner.</p>
         </div>
         <span className="ai-label">
           <Sparkles size={15} /> Powered by Gemini + Google Search
         </span>
       </div>
+      <section className="discovery-options" aria-label="Lead search options">
+        <button
+          type="button"
+          className="discovery-option selected"
+          aria-pressed="true"
+          onClick={() => searchInput.current?.focus()}
+        >
+          <span className="discovery-option-icon">
+            <Sparkles size={21} />
+          </span>
+          <span className="discovery-option-copy">
+            <strong>Search with AI</strong>
+            <span>Research public sources with Gemini.</span>
+          </span>
+          <span className="discovery-option-badge">Selected</span>
+        </button>
+        <a
+          className="discovery-option linkedin-option"
+          href="https://www.linkedin.com/search/results/people/?origin=SWITCH_SEARCH_VERTICAL"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Search with LinkedIn (opens in a new tab)"
+        >
+          <span className="discovery-option-icon">
+            <Users size={21} />
+          </span>
+          <span className="discovery-option-copy">
+            <strong>Search with LinkedIn</strong>
+            <span>Open people search in a new tab.</span>
+          </span>
+          <ExternalLink size={16} />
+        </a>
+        <button type="button" className="discovery-option" disabled>
+          <span className="discovery-option-icon">
+            <Building2 size={21} />
+          </span>
+          <span className="discovery-option-copy">
+            <strong>Search with Apollo</strong>
+            <span>Discover leads through a third party.</span>
+          </span>
+          <span className="discovery-option-badge">Coming soon</span>
+        </button>
+      </section>
       <div className="verification-notice">
         <ShieldCheck size={22} />
         <div>
@@ -92,6 +138,7 @@ export function LeadSearch() {
           <div className="discovery-query">
             <Search size={20} />
             <input
+              ref={searchInput}
               required
               minLength={3}
               maxLength={600}
