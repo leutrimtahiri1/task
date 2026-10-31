@@ -13,6 +13,7 @@ import {
   Check,
   History,
   LoaderCircle,
+  MessageSquareText,
   Plus,
   Trash2,
   X,
@@ -38,6 +39,7 @@ type Props = {
   onClose: () => void;
   onSave: (fields: PartnerFields, id?: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onMessages?: () => void;
 };
 
 export function PartnerForm({
@@ -47,6 +49,7 @@ export function PartnerForm({
   onClose,
   onSave,
   onDelete,
+  onMessages,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const companyList = useId();
@@ -476,7 +479,18 @@ export function PartnerForm({
           )}
         </div>
         <footer className="dialog-footer">
-          <div>
+          <div className="button-row">
+            {onMessages && (
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy}
+                onClick={onMessages}
+              >
+                <MessageSquareText size={15} />
+                Messages
+              </button>
+            )}
             {partner && (
               <button
                 type="button"

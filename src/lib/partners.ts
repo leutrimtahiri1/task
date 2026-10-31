@@ -1,3 +1,5 @@
+import type { PartnerMessage } from "./outreach";
+
 export const STAGES = [
   { value: "found", label: "Found", color: "slate" },
   { value: "contacted", label: "Contacted", color: "blue" },
@@ -63,9 +65,27 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      partner_messages: {
+        Row: PartnerMessage;
+        Insert: Omit<PartnerMessage, "id" | "created_at">;
+        Update: Partial<Pick<PartnerMessage, "subject" | "body" | "sent_at">>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      claim_ai_request: { Args: { p_kind: string }; Returns: undefined };
+      record_partner_message_sent: {
+        Args: {
+          p_message_id: string;
+          p_subject: string;
+          p_body: string;
+          p_sent_at: string;
+          p_contact_date: string;
+        };
+        Returns: PartnerMessage;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

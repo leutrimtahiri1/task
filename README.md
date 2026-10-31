@@ -1,7 +1,8 @@
 # Partnerflow
 
-A Next.js and Supabase app for manually tracking partner representatives, their
-pipeline stages, and the next follow-up. No outreach messages are sent.
+A Next.js and Supabase app for researching potential partners, drafting
+personalized outreach, and tracking representatives through a pipeline.
+Messages are reviewed, copied, and sent manually outside the app.
 
 ## Run locally
 
@@ -24,6 +25,21 @@ credentials out of Git. The publishable key identifies the app; Supabase Auth
 and Row Level Security control which records a user can access. No database
 password or privileged secret key is needed in the browser.
 
+For lead research and message generation, add a server-only Gemini key:
+
+```dotenv
+GEMINI_API_KEY=your_new_key
+# Optional; this is the default model:
+GEMINI_MODEL=gemini-3.8-flash
+```
+
+Create the key in [Google AI Studio](https://aistudio.google.com/api-keys).
+Never prefix it with `NEXT_PUBLIC_` or commit it. Restart `npm run dev` after
+adding it. Search requires a project/model with Google Search grounding access;
+Google currently requires paid-tier API access for this feature, even when a
+free search allowance applies. Model tokens and search requests have separate
+pricing. See [Google pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
 ## Apply the database migration
 
 The Supabase CLI is a pinned development dependency. Authenticate and link once:
@@ -45,7 +61,8 @@ npm run db:migrations
 These commands target the linked hosted database. Docker is not required for
 this workflow. Preview lists pending files; it does not validate their SQL.
 
-The migration creates `public.partners` and `public.partner_status_history`.
+The migrations create `public.partners`, `public.partner_status_history`,
+`public.partner_messages`, and the private `public.ai_request_log` budget table.
 Status history is written by a database trigger in the same transaction as the
 partner change. Authenticated users can only access records they own; public
 unauthenticated access and direct history writes are denied.
@@ -91,6 +108,64 @@ Reminder dates use the browser's local calendar date, refresh at least every
 are **in-app reminders**, not background notifications or automatic email,
 LinkedIn, or WhatsApp messages.
 
+## Discover leads
+
+Open **Discover leads** (`/search`). Enter a business search and optionally
+choose partner type, market served, and insurance product. The authenticated
+server calls Gemini's Interactions API with the Google Search tool enabled.
+Findings include source links, Google's associated search suggestions, and a
+prominent reminder to verify information. Unsourced responses are rejected.
+
+Search findings are rendered only to the requesting user and are not saved,
+cached, automatically copied into contacts, or fed into message generation.
+Independently verify relevant information on original company sources, then
+use **Partners** (`/partners`) to enter the business details manually. Research
+may be incomplete or inaccurate; a model suggestion is not a verified lead.
+The app does not scrape LinkedIn or log in to third-party sites.
+
+This display-only design follows the restrictions in Google's
+[Grounding with Google Search terms](https://ai.google.dev/gemini-api/terms#grounding-with-google-search).
+Search findings must not be used to build a programmatically collected database.
+Google's supplied suggestion markup is sanitized and its styling isolated in a
+shadow root; model-written HTML is never executed.
+
+## Generate and record outreach
+
+On a representative's row, click **Messages**, or open their edit form and
+choose **Messages** there. Add an optional brief with your company, sender
+name, partnership goals, language, tone, and any extra instructions. The app
+generates and saves six drafts: an initial message and one follow-up for each
+of Email, LinkedIn, and WhatsApp. Email drafts include a subject line.
+
+Only saved partner facts relevant to personalization (name, company, role,
+stage, contact origin/method, outcome, and notes) plus your brief go to Gemini.
+Contact numbers, email addresses, ownership IDs, and auth tokens are excluded.
+Do not enter private personal information in notes or prompts. Follow-up drafts
+are written for use after the corresponding initial message has actually been
+sent; no schedule or previous conversation is invented. Missing sender details
+remain placeholders for you to replace.
+
+- Review and edit drafts. **Save draft** persists edits; **Copy** copies the
+  current text, including the subject for email. Copying does not save edits
+  or mark anything as sent.
+- **Generate new versions** creates another saved batch. Prior drafts remain
+  accessible under History; sent messages are preserved.
+- After sending a message yourself, choose **Record as sent**. Review the final
+  snapshot and enter the actual local sent time. Confirmation saves the final
+  text and timestamp and updates the partner in one database transaction.
+- A Found partner becomes Contacted. Replied, In talks, and Signed are never
+  downgraded. The contact date and contacted-by field are updated. Sent snapshots
+  are read-only. Follow-up dates still use the existing manual scheduling form.
+- WhatsApp drafts include a recipient-permission reminder. A public phone number
+  does not establish opt-in. The app has no messaging delivery integrations.
+
+All AI endpoints verify the Supabase session server-side. Database ownership
+policies protect drafts and sent records. A database-backed guard permits at
+most 5 AI requests per minute and 50 per rolling day per account, across both
+search and generation. Failed provider calls also count as attempts. No search
+text or prompts are stored in the budget log. Before a public launch, add global
+spend controls and account-abuse protections appropriate to the deployment.
+
 ## Checks
 
 ```bash
@@ -103,7 +178,12 @@ npm run build
 Tests use Node's test runner and an isolated in-memory PostgreSQL instance
 (PGlite), not your hosted database. They verify the actual migration's RLS
 policies, SQL constraints, and history trigger, plus follow-up completion,
-deduplication, calendar boundaries, and input validation. Run date tests in
+deduplication, calendar boundaries, and input validation. Additional tests cover
+the message schema/RLS, read-only sent records, atomic stage transitions, AI
+rate limits, response validation, and real API Route Handlers with mocked HTTP
+providers. Tests never spend model quota or write to your hosted database.
+The test command uses the `react-server` export condition for `server-only`
+route imports. Run date tests in
 another time zone with `TZ=America/Los_Angeles npm test`.
 
 ```bash
@@ -114,6 +194,11 @@ npm run format
 
 - `src/components/partner-tracker.tsx`: auth, table, filters, and follow-up queue.
 - `src/components/partner-form.tsx`: add/edit form and stage history.
+- `src/components/lead-search.tsx`: discovery form, report, and source display.
+- `src/components/outreach-dialog.tsx`: drafts, copy, and sent-message history.
+- `src/app/api/`: authenticated search, generation, and record-sent handlers.
+- `src/lib/server/`: server-only Gemini requests and API authentication.
+- `src/lib/ai-contract.ts`: prompts and provider response validation.
 - `src/lib/partners.ts`: types, validation, and calendar/follow-up logic.
 - `src/lib/supabase.ts`: browser Supabase client using the public environment.
 - `supabase/migrations/`: database schema, policies, and triggers.

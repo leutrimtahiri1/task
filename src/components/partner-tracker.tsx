@@ -8,6 +8,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import Link from "next/link";
 import type { Session, User } from "@supabase/supabase-js";
 import {
   ArrowDownUp,
@@ -25,6 +26,7 @@ import {
   LogOut,
   Mail,
   MoreHorizontal,
+  MessageSquareText,
   Network,
   Plus,
   RefreshCw,
@@ -47,10 +49,16 @@ import {
   type Stage,
 } from "@/lib/partners";
 import { PartnerForm } from "./partner-form";
+import { LeadSearch } from "./lead-search";
+import { OutreachDialog } from "./outreach-dialog";
 
 type View = "all" | "due" | "unread";
 
-export default function PartnerTracker() {
+export default function PartnerTracker({
+  section = "partners",
+}: {
+  section?: "partners" | "search";
+}) {
   const [{ client, setupError }] = useState(() => {
     try {
       return { client: getSupabase(), setupError: "" };
@@ -104,7 +112,9 @@ export default function PartnerTracker() {
       </div>
     );
   if (!session) return <AuthScreen initialError={authError} />;
-  return <Workspace key={session.user.id} user={session.user} />;
+  return (
+    <Workspace key={session.user.id} user={session.user} section={section} />
+  );
 }
 
 function Brand() {
@@ -269,12 +279,23 @@ function AuthScreen({ initialError }: { initialError: string }) {
   );
 }
 
-function Workspace({ user }: { user: User }) {
+function Workspace({
+  user,
+  section,
+}: {
+  user: User;
+  section: "partners" | "search";
+}) {
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [outreach, setOutreach] = useState<Partner | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [view, setView] = useState<View>("all");
+  const [view, setView] = useState<View>(() =>
+    typeof window !== "undefined" && window.location.hash === "#follow-ups"
+      ? "due"
+      : "all",
+  );
   const [stage, setStage] = useState<Stage | "all">("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("updated");
@@ -397,6 +418,12 @@ function Workspace({ user }: { user: User }) {
     ...new Set(partners.map((partner) => partner.company_name).filter(Boolean)),
   ].sort();
   function changeView(next: View) {
+    if (section === "search") {
+      window.location.assign(
+        next === "due" ? "/partners#follow-ups" : "/partners",
+      );
+      return;
+    }
     setView(next);
     setPage(0);
   }
@@ -483,23 +510,39 @@ function Workspace({ user }: { user: User }) {
         </div>
         <span className="nav-label">WORKSPACE</span>
         <nav aria-label="Main navigation">
-          <button
-            className={view !== "due" ? "nav-item active" : "nav-item"}
-            onClick={() => changeView("all")}
+          <Link
+            className={section === "search" ? "nav-item active" : "nav-item"}
+            href="/search"
           >
-            <Users size={19} />
-            Partners<span>{partners.length}</span>
-          </button>
-          <button
-            className={view === "due" ? "nav-item active" : "nav-item"}
-            onClick={() => changeView("due")}
-          >
-            <Bell size={19} />
-            Follow-ups
-            {dueTasks.length > 0 && (
-              <span className="notification-count">{dueTasks.length}</span>
-            )}
-          </button>
+            <Search size={19} />
+            Discover leads
+          </Link>
+          {section === "search" ? (
+            <Link className="nav-item" href="/partners">
+              <Users size={19} />
+              Partners<span>{partners.length}</span>
+            </Link>
+          ) : (
+            <button
+              className={view !== "due" ? "nav-item active" : "nav-item"}
+              onClick={() => changeView("all")}
+            >
+              <Users size={19} />
+              Partners<span>{partners.length}</span>
+            </button>
+          )}
+          {section !== "search" && (
+            <button
+              className={view === "due" ? "nav-item active" : "nav-item"}
+              onClick={() => changeView("due")}
+            >
+              <Bell size={19} />
+              Follow-ups
+              {dueTasks.length > 0 && (
+                <span className="notification-count">{dueTasks.length}</span>
+              )}
+            </button>
+          )}
         </nav>
         <div className="sidebar-tip">
           <span className="tip-icon">
@@ -533,7 +576,13 @@ function Workspace({ user }: { user: User }) {
             <LayoutGrid size={16} />
             <span>Workspace</span>
             <ChevronRight size={14} />
-            <strong>{view === "due" ? "Follow-ups" : "Partners"}</strong>
+            <strong>
+              {section === "search"
+                ? "Discover leads"
+                : view === "due"
+                  ? "Follow-ups"
+                  : "Partners"}
+            </strong>
           </div>
           <div className="topbar-right">
             <span className="today-label">{formatDate(today)}</span>
@@ -550,510 +599,528 @@ function Workspace({ user }: { user: User }) {
             </span>
           </div>
         </header>
-        <main className="page-content">
-          <div className="page-heading">
-            <div>
-              <div className="heading-eyebrow">
-                <span /> YOUR RELATIONSHIPS, MOVING FORWARD
-              </div>
-              <h1>
-                {view === "due"
-                  ? "A little follow-up goes a long way."
-                  : "Partner pipeline"}
-              </h1>
-              <p>
-                {view === "due"
-                  ? "Know who needs a nudge, and make every conversation count."
-                  : "From first hello to signed partner. Keep the next step in sight."}
-              </p>
-            </div>
-            <button
-              className="primary-button"
-              disabled={loading}
-              onClick={() => setEditing(null)}
-            >
-              <Plus size={18} /> Add representative
-            </button>
-          </div>
-          <section
-            className="stage-cards"
-            aria-label="Filter by pipeline stage"
-          >
-            {STAGES.map((item, index) => (
-              <button
-                key={item.value}
-                className={`stage-card ${item.color}${stage === item.value ? " selected" : ""}`}
-                onClick={() => {
-                  setStage(stage === item.value ? "all" : item.value);
-                  setPage(0);
-                }}
-                aria-pressed={stage === item.value}
-              >
-                <div>
-                  <span className={`stage-dot ${item.color}`} />
-                  <span>{item.label}</span>
-                  <span className="stage-number">0{index + 1}</span>
-                </div>
-                <strong>{counts[item.value] ?? 0}</strong>
-                <span className="stage-description">
-                  {
-                    [
-                      "New possibilities",
-                      "First hello sent",
-                      "Conversation started",
-                      "Building a partnership",
-                      "Made it official",
-                    ][index]
-                  }
-                </span>
-              </button>
-            ))}
-          </section>
-          {dueTasks.length > 0 && (
-            <div className="due-banner">
-              <span className="due-banner-icon">
-                <Clock3 size={19} />
-              </span>
+        {section === "search" ? (
+          <LeadSearch />
+        ) : (
+          <main className="page-content">
+            <div className="page-heading">
               <div>
-                <strong>
-                  {duePartners.length}{" "}
-                  {duePartners.length === 1 ? "partner needs" : "partners need"}{" "}
-                  a follow-up
-                </strong>
-                <span>
-                  {overdue > 0
-                    ? `${overdue} overdue ${overdue === 1 ? "task" : "tasks"} · `
-                    : ""}
-                  {dueTasks.filter((item) => item.date === today).length} due
-                  today. A good time to reconnect.
-                </span>
+                <div className="heading-eyebrow">
+                  <span /> YOUR RELATIONSHIPS, MOVING FORWARD
+                </div>
+                <h1>
+                  {view === "due"
+                    ? "A little follow-up goes a long way."
+                    : "Partner pipeline"}
+                </h1>
+                <p>
+                  {view === "due"
+                    ? "Know who needs a nudge, and make every conversation count."
+                    : "From first hello to signed partner. Keep the next step in sight."}
+                </p>
               </div>
-              <button onClick={() => changeView("due")}>
-                View follow-ups <ArrowRight size={16} />
-              </button>
-            </div>
-          )}
-          {error && (
-            <div className="error-message error-banner" role="alert">
-              <span>{error}</span>
-              <button type="button" className="text-button" onClick={refresh}>
-                Try again
-              </button>
-            </div>
-          )}
-          <div className="content-grid">
-            <section className="partners-card" aria-label="Representatives">
-              <div
-                className="table-tabs"
-                role="group"
-                aria-label="Filter representatives"
+              <button
+                className="primary-button"
+                disabled={loading}
+                onClick={() => setEditing(null)}
               >
+                <Plus size={18} /> Add representative
+              </button>
+            </div>
+            <section
+              className="stage-cards"
+              aria-label="Filter by pipeline stage"
+            >
+              {STAGES.map((item, index) => (
                 <button
-                  className={view === "all" ? "selected" : ""}
-                  onClick={() => changeView("all")}
+                  key={item.value}
+                  className={`stage-card ${item.color}${stage === item.value ? " selected" : ""}`}
+                  onClick={() => {
+                    setStage(stage === item.value ? "all" : item.value);
+                    setPage(0);
+                  }}
+                  aria-pressed={stage === item.value}
                 >
-                  All partners <span>{partners.length}</span>
-                </button>
-                <button
-                  className={view === "due" ? "selected" : ""}
-                  onClick={() => changeView("due")}
-                >
-                  Needs follow-up <span>{duePartners.length}</span>
-                </button>
-                <button
-                  className={view === "unread" ? "selected" : ""}
-                  onClick={() => changeView("unread")}
-                >
-                  Unread <span>{unread}</span>
-                </button>
-              </div>
-              <div className="table-toolbar">
-                <label className="search-box">
-                  <Search size={17} />
-                  <input
-                    aria-label="Search partners"
-                    placeholder="Search name, company, or email…"
-                    value={search}
-                    onChange={(event) => {
-                      setSearch(event.target.value);
-                      setPage(0);
-                    }}
-                  />
-                  {search && (
-                    <button
-                      className="icon-button"
-                      aria-label="Clear search"
-                      onClick={() => {
-                        setSearch("");
-                        setPage(0);
-                      }}
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </label>
-                <div className="table-filters">
-                  <select
-                    aria-label="Filter by status"
-                    value={stage}
-                    onChange={(event) => {
-                      setStage(event.target.value as Stage | "all");
-                      setPage(0);
-                    }}
-                  >
-                    <option value="all">All stages</option>
-                    {STAGES.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                  <label className="sort-select">
-                    <ArrowDownUp size={14} />
-                    <select
-                      aria-label="Sort partners"
-                      value={sort}
-                      onChange={(event) => {
-                        setSort(event.target.value);
-                        setPage(0);
-                      }}
-                    >
-                      <option value="updated">Last updated</option>
-                      <option value="followup">Next follow-up</option>
-                      <option value="company">Company A–Z</option>
-                    </select>
-                  </label>
-                  <button
-                    className="icon-button refresh-button"
-                    aria-label="Refresh partners"
-                    disabled={loading}
-                    onClick={refresh}
-                  >
-                    <RefreshCw size={16} className={loading ? "spin" : ""} />
-                  </button>
-                </div>
-              </div>
-              {loading && partners.length === 0 ? (
-                <div className="empty-state">
-                  <LoaderCircle className="spin" size={26} />
-                  <h3>Loading your partners…</h3>
-                </div>
-              ) : visible.length === 0 ? (
-                <div className="empty-state">
-                  <span className="empty-icon">
-                    {partners.length ? (
-                      <Search size={26} />
-                    ) : (
-                      <Users size={28} />
-                    )}
-                  </span>
-                  <h3>
-                    {partners.length
-                      ? "No partners match this view"
-                      : "Your next partnership starts here"}
-                  </h3>
-                  <p>
-                    {partners.length
-                      ? "Try another search or stage to find your representative."
-                      : "Add your first representative and give every relationship a next step."}
-                  </p>
-                  <button
-                    className={
-                      partners.length ? "secondary-button" : "primary-button"
+                  <div>
+                    <span className={`stage-dot ${item.color}`} />
+                    <span>{item.label}</span>
+                    <span className="stage-number">0{index + 1}</span>
+                  </div>
+                  <strong>{counts[item.value] ?? 0}</strong>
+                  <span className="stage-description">
+                    {
+                      [
+                        "New possibilities",
+                        "First hello sent",
+                        "Conversation started",
+                        "Building a partnership",
+                        "Made it official",
+                      ][index]
                     }
-                    onClick={() => {
-                      if (partners.length) {
-                        setSearch("");
-                        setStage("all");
-                        changeView("all");
-                      } else setEditing(null);
-                    }}
+                  </span>
+                </button>
+              ))}
+            </section>
+            {dueTasks.length > 0 && (
+              <div className="due-banner">
+                <span className="due-banner-icon">
+                  <Clock3 size={19} />
+                </span>
+                <div>
+                  <strong>
+                    {duePartners.length}{" "}
+                    {duePartners.length === 1
+                      ? "partner needs"
+                      : "partners need"}{" "}
+                    a follow-up
+                  </strong>
+                  <span>
+                    {overdue > 0
+                      ? `${overdue} overdue ${overdue === 1 ? "task" : "tasks"} · `
+                      : ""}
+                    {dueTasks.filter((item) => item.date === today).length} due
+                    today. A good time to reconnect.
+                  </span>
+                </div>
+                <button onClick={() => changeView("due")}>
+                  View follow-ups <ArrowRight size={16} />
+                </button>
+              </div>
+            )}
+            {error && (
+              <div className="error-message error-banner" role="alert">
+                <span>{error}</span>
+                <button type="button" className="text-button" onClick={refresh}>
+                  Try again
+                </button>
+              </div>
+            )}
+            <div className="content-grid">
+              <section className="partners-card" aria-label="Representatives">
+                <div
+                  className="table-tabs"
+                  role="group"
+                  aria-label="Filter representatives"
+                >
+                  <button
+                    className={view === "all" ? "selected" : ""}
+                    onClick={() => changeView("all")}
                   >
-                    {partners.length ? (
-                      "Clear filters"
-                    ) : (
-                      <>
-                        <Plus size={16} /> Add your first representative
-                      </>
-                    )}
+                    All partners <span>{partners.length}</span>
+                  </button>
+                  <button
+                    className={view === "due" ? "selected" : ""}
+                    onClick={() => changeView("due")}
+                  >
+                    Needs follow-up <span>{duePartners.length}</span>
+                  </button>
+                  <button
+                    className={view === "unread" ? "selected" : ""}
+                    onClick={() => changeView("unread")}
+                  >
+                    Unread <span>{unread}</span>
                   </button>
                 </div>
-              ) : (
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Representative</th>
-                        <th>Company</th>
-                        <th>Status</th>
-                        <th>Next follow-up</th>
-                        <th>Assigned to</th>
-                        <th>
-                          <span className="sr-only">Actions</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visible.map((partner) => {
-                        const next = nextFollowUp(partner);
-                        return (
-                          <tr
-                            key={partner.id}
-                            className={partner.is_unread ? "unread-row" : ""}
-                          >
-                            <td>
-                              <button
-                                className="person-cell"
-                                onClick={() => setEditing(partner)}
-                              >
-                                <span
-                                  className={`person-avatar avatar-${partner.first_name.charCodeAt(0) % 4}`}
-                                >
-                                  {partner.first_name[0]}
-                                  {partner.last_name[0]}
-                                </span>
-                                <span>
-                                  <strong>
-                                    {partner.first_name} {partner.last_name}
-                                    {partner.is_unread && (
-                                      <i className="unread-dot" />
-                                    )}
-                                  </strong>
-                                  <small>
-                                    {partner.role ||
-                                      partner.email ||
-                                      "No role added"}
-                                  </small>
-                                </span>
-                              </button>
-                            </td>
-                            <td>
-                              <div className="company-cell">
-                                {partner.company_name ? (
-                                  <>
-                                    <Building2 size={14} />
-                                    <span>{partner.company_name}</span>
-                                  </>
-                                ) : (
-                                  <span className="muted">No company</span>
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              <div
-                                className={`status-select ${STAGES.find((item) => item.value === partner.status)?.color}`}
-                              >
-                                <span className="stage-dot" />
-                                <select
-                                  aria-label={`Status for ${partner.first_name} ${partner.last_name}`}
-                                  value={partner.status}
-                                  disabled={pendingIds.includes(partner.id)}
-                                  onChange={(event) =>
-                                    void patch(
-                                      partner,
-                                      { status: event.target.value as Stage },
-                                      "Pipeline stage updated.",
-                                    )
-                                  }
-                                >
-                                  {STAGES.map((item) => (
-                                    <option key={item.value} value={item.value}>
-                                      {item.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </td>
-                            <td>
-                              <div
-                                className={`follow-up-cell${next && next < today ? " overdue" : next === today ? " due-today" : ""}`}
-                              >
-                                {next && <Clock3 size={14} />}
-                                <span>
-                                  {next
-                                    ? next === today
-                                      ? "Today"
-                                      : formatDate(next)
-                                    : "Not scheduled"}
-                                  {next && next < today && (
-                                    <small>Overdue</small>
-                                  )}
-                                </span>
-                              </div>
-                            </td>
-                            <td>
-                              {partner.assigned_to ? (
-                                <span className="assignee">
-                                  <span className="user-avatar tiny">
-                                    {(user.email ?? "M")[0].toUpperCase()}
-                                  </span>
-                                  Me
-                                </span>
-                              ) : (
-                                <span className="muted">Unassigned</span>
-                              )}
-                            </td>
-                            <td>
-                              <div className="row-actions">
+                <div className="table-toolbar">
+                  <label className="search-box">
+                    <Search size={17} />
+                    <input
+                      aria-label="Search partners"
+                      placeholder="Search name, company, or email…"
+                      value={search}
+                      onChange={(event) => {
+                        setSearch(event.target.value);
+                        setPage(0);
+                      }}
+                    />
+                    {search && (
+                      <button
+                        className="icon-button"
+                        aria-label="Clear search"
+                        onClick={() => {
+                          setSearch("");
+                          setPage(0);
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </label>
+                  <div className="table-filters">
+                    <select
+                      aria-label="Filter by status"
+                      value={stage}
+                      onChange={(event) => {
+                        setStage(event.target.value as Stage | "all");
+                        setPage(0);
+                      }}
+                    >
+                      <option value="all">All stages</option>
+                      {STAGES.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="sort-select">
+                      <ArrowDownUp size={14} />
+                      <select
+                        aria-label="Sort partners"
+                        value={sort}
+                        onChange={(event) => {
+                          setSort(event.target.value);
+                          setPage(0);
+                        }}
+                      >
+                        <option value="updated">Last updated</option>
+                        <option value="followup">Next follow-up</option>
+                        <option value="company">Company A–Z</option>
+                      </select>
+                    </label>
+                    <button
+                      className="icon-button refresh-button"
+                      aria-label="Refresh partners"
+                      disabled={loading}
+                      onClick={refresh}
+                    >
+                      <RefreshCw size={16} className={loading ? "spin" : ""} />
+                    </button>
+                  </div>
+                </div>
+                {loading && partners.length === 0 ? (
+                  <div className="empty-state">
+                    <LoaderCircle className="spin" size={26} />
+                    <h3>Loading your partners…</h3>
+                  </div>
+                ) : visible.length === 0 ? (
+                  <div className="empty-state">
+                    <span className="empty-icon">
+                      {partners.length ? (
+                        <Search size={26} />
+                      ) : (
+                        <Users size={28} />
+                      )}
+                    </span>
+                    <h3>
+                      {partners.length
+                        ? "No partners match this view"
+                        : "Your next partnership starts here"}
+                    </h3>
+                    <p>
+                      {partners.length
+                        ? "Try another search or stage to find your representative."
+                        : "Add your first representative and give every relationship a next step."}
+                    </p>
+                    <button
+                      className={
+                        partners.length ? "secondary-button" : "primary-button"
+                      }
+                      onClick={() => {
+                        if (partners.length) {
+                          setSearch("");
+                          setStage("all");
+                          changeView("all");
+                        } else setEditing(null);
+                      }}
+                    >
+                      {partners.length ? (
+                        "Clear filters"
+                      ) : (
+                        <>
+                          <Plus size={16} /> Add your first representative
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Representative</th>
+                          <th>Company</th>
+                          <th>Status</th>
+                          <th>Next follow-up</th>
+                          <th>Assigned to</th>
+                          <th>
+                            <span className="sr-only">Actions</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visible.map((partner) => {
+                          const next = nextFollowUp(partner);
+                          return (
+                            <tr
+                              key={partner.id}
+                              className={partner.is_unread ? "unread-row" : ""}
+                            >
+                              <td>
                                 <button
-                                  className={`icon-button${partner.is_unread ? " is-unread" : ""}`}
-                                  aria-label={`Mark ${partner.first_name} as ${partner.is_unread ? "read" : "unread"}`}
-                                  disabled={pendingIds.includes(partner.id)}
-                                  onClick={() =>
-                                    void patch(
-                                      partner,
-                                      { is_unread: !partner.is_unread },
-                                      partner.is_unread
-                                        ? "Marked as read."
-                                        : "Marked as unread.",
-                                    )
-                                  }
-                                >
-                                  <Mail size={16} />
-                                </button>
-                                <button
-                                  className="icon-button"
-                                  aria-label={`Edit ${partner.first_name}`}
+                                  className="person-cell"
                                   onClick={() => setEditing(partner)}
                                 >
-                                  <MoreHorizontal size={19} />
+                                  <span
+                                    className={`person-avatar avatar-${partner.first_name.charCodeAt(0) % 4}`}
+                                  >
+                                    {partner.first_name[0]}
+                                    {partner.last_name[0]}
+                                  </span>
+                                  <span>
+                                    <strong>
+                                      {partner.first_name} {partner.last_name}
+                                      {partner.is_unread && (
+                                        <i className="unread-dot" />
+                                      )}
+                                    </strong>
+                                    <small>
+                                      {partner.role ||
+                                        partner.email ||
+                                        "No role added"}
+                                    </small>
+                                  </span>
                                 </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <footer className="table-footer">
-                <span>
-                  {filtered.length === 0
-                    ? "0 representatives"
-                    : `Showing ${activePage * 10 + 1}–${Math.min((activePage + 1) * 10, filtered.length)} of ${filtered.length} representatives`}
-                </span>
-                <div>
-                  <button
-                    className="icon-button"
-                    aria-label="Previous page"
-                    disabled={activePage === 0}
-                    onClick={() => setPage(activePage - 1)}
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <span className="page-indicator">{activePage + 1}</span>
-                  <button
-                    className="icon-button"
-                    aria-label="Next page"
-                    disabled={activePage >= pageCount - 1}
-                    onClick={() => setPage(activePage + 1)}
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </footer>
-            </section>
-            <aside className="followups-card">
-              <header>
-                <span className="followups-icon">
-                  <Bell size={18} />
-                </span>
-                <div>
-                  <h2>Next on your list</h2>
-                  <p>A little nudge, right on time.</p>
-                </div>
-              </header>
-              {agenda.length === 0 ? (
-                <div className="agenda-empty">
+                              </td>
+                              <td>
+                                <div className="company-cell">
+                                  {partner.company_name ? (
+                                    <>
+                                      <Building2 size={14} />
+                                      <span>{partner.company_name}</span>
+                                    </>
+                                  ) : (
+                                    <span className="muted">No company</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <div
+                                  className={`status-select ${STAGES.find((item) => item.value === partner.status)?.color}`}
+                                >
+                                  <span className="stage-dot" />
+                                  <select
+                                    aria-label={`Status for ${partner.first_name} ${partner.last_name}`}
+                                    value={partner.status}
+                                    disabled={pendingIds.includes(partner.id)}
+                                    onChange={(event) =>
+                                      void patch(
+                                        partner,
+                                        { status: event.target.value as Stage },
+                                        "Pipeline stage updated.",
+                                      )
+                                    }
+                                  >
+                                    {STAGES.map((item) => (
+                                      <option
+                                        key={item.value}
+                                        value={item.value}
+                                      >
+                                        {item.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </td>
+                              <td>
+                                <div
+                                  className={`follow-up-cell${next && next < today ? " overdue" : next === today ? " due-today" : ""}`}
+                                >
+                                  {next && <Clock3 size={14} />}
+                                  <span>
+                                    {next
+                                      ? next === today
+                                        ? "Today"
+                                        : formatDate(next)
+                                      : "Not scheduled"}
+                                    {next && next < today && (
+                                      <small>Overdue</small>
+                                    )}
+                                  </span>
+                                </div>
+                              </td>
+                              <td>
+                                {partner.assigned_to ? (
+                                  <span className="assignee">
+                                    <span className="user-avatar tiny">
+                                      {(user.email ?? "M")[0].toUpperCase()}
+                                    </span>
+                                    Me
+                                  </span>
+                                ) : (
+                                  <span className="muted">Unassigned</span>
+                                )}
+                              </td>
+                              <td>
+                                <div className="row-actions">
+                                  <button
+                                    className="message-row-button"
+                                    title="Generate and review messages"
+                                    onClick={() => setOutreach(partner)}
+                                    aria-label={`Messages for ${partner.first_name}`}
+                                  >
+                                    <MessageSquareText size={15} />
+                                    <span>Messages</span>
+                                  </button>
+                                  <button
+                                    className={`icon-button${partner.is_unread ? " is-unread" : ""}`}
+                                    aria-label={`Mark ${partner.first_name} as ${partner.is_unread ? "read" : "unread"}`}
+                                    disabled={pendingIds.includes(partner.id)}
+                                    onClick={() =>
+                                      void patch(
+                                        partner,
+                                        { is_unread: !partner.is_unread },
+                                        partner.is_unread
+                                          ? "Marked as read."
+                                          : "Marked as unread.",
+                                      )
+                                    }
+                                  >
+                                    <Mail size={16} />
+                                  </button>
+                                  <button
+                                    className="icon-button"
+                                    aria-label={`Edit ${partner.first_name}`}
+                                    onClick={() => setEditing(partner)}
+                                  >
+                                    <MoreHorizontal size={19} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <footer className="table-footer">
                   <span>
-                    <Check size={22} />
+                    {filtered.length === 0
+                      ? "0 representatives"
+                      : `Showing ${activePage * 10 + 1}–${Math.min((activePage + 1) * 10, filtered.length)} of ${filtered.length} representatives`}
                   </span>
-                  <strong>You’re all caught up</strong>
-                  <p>
-                    Add a reminder or follow-up date to a representative to see
-                    it here.
-                  </p>
-                </div>
-              ) : (
-                <div className="agenda-list">
-                  {agenda
-                    .slice(0, view === "due" ? 20 : 5)
-                    .map(({ partner, date }) => (
-                      <div
-                        className="agenda-item"
-                        key={`${partner.id}-${date}`}
-                      >
-                        <div className="agenda-date">
-                          <span
-                            className={`agenda-tag${date < today ? " overdue" : date === today ? " due-today" : ""}`}
-                          >
-                            {date < today
-                              ? "OVERDUE"
-                              : date === today
-                                ? "TODAY"
-                                : "UPCOMING"}
-                          </span>
-                          <span>{formatDate(date)}</span>
-                        </div>
-                        <button
-                          className="agenda-person"
-                          onClick={() => setEditing(partner)}
+                  <div>
+                    <button
+                      className="icon-button"
+                      aria-label="Previous page"
+                      disabled={activePage === 0}
+                      onClick={() => setPage(activePage - 1)}
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="page-indicator">{activePage + 1}</span>
+                    <button
+                      className="icon-button"
+                      aria-label="Next page"
+                      disabled={activePage >= pageCount - 1}
+                      onClick={() => setPage(activePage + 1)}
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </footer>
+              </section>
+              <aside className="followups-card">
+                <header>
+                  <span className="followups-icon">
+                    <Bell size={18} />
+                  </span>
+                  <div>
+                    <h2>Next on your list</h2>
+                    <p>A little nudge, right on time.</p>
+                  </div>
+                </header>
+                {agenda.length === 0 ? (
+                  <div className="agenda-empty">
+                    <span>
+                      <Check size={22} />
+                    </span>
+                    <strong>You’re all caught up</strong>
+                    <p>
+                      Add a reminder or follow-up date to a representative to
+                      see it here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="agenda-list">
+                    {agenda
+                      .slice(0, view === "due" ? 20 : 5)
+                      .map(({ partner, date }) => (
+                        <div
+                          className="agenda-item"
+                          key={`${partner.id}-${date}`}
                         >
-                          <strong>
-                            {partner.first_name} {partner.last_name}
-                          </strong>
-                          <span>
-                            {partner.company_name ||
-                              "Independent representative"}
-                          </span>
-                        </button>
-                        <div className="agenda-bottom">
-                          <span>
-                            {partner.method_of_contact || "Follow up"}
-                          </span>
+                          <div className="agenda-date">
+                            <span
+                              className={`agenda-tag${date < today ? " overdue" : date === today ? " due-today" : ""}`}
+                            >
+                              {date < today
+                                ? "OVERDUE"
+                                : date === today
+                                  ? "TODAY"
+                                  : "UPCOMING"}
+                            </span>
+                            <span>{formatDate(date)}</span>
+                          </div>
                           <button
-                            disabled={pendingIds.includes(partner.id)}
-                            onClick={() =>
-                              void patch(
-                                partner,
-                                completeDate(partner, date),
-                                "Follow-up completed.",
-                              )
-                            }
-                            aria-label={`Complete follow-up with ${partner.first_name} on ${formatDate(date)}`}
+                            className="agenda-person"
+                            onClick={() => setEditing(partner)}
                           >
-                            <Check size={14} /> Done
+                            <strong>
+                              {partner.first_name} {partner.last_name}
+                            </strong>
+                            <span>
+                              {partner.company_name ||
+                                "Independent representative"}
+                            </span>
                           </button>
+                          <div className="agenda-bottom">
+                            <span>
+                              {partner.method_of_contact || "Follow up"}
+                            </span>
+                            <button
+                              disabled={pendingIds.includes(partner.id)}
+                              onClick={() =>
+                                void patch(
+                                  partner,
+                                  completeDate(partner, date),
+                                  "Follow-up completed.",
+                                )
+                              }
+                              aria-label={`Complete follow-up with ${partner.first_name} on ${formatDate(date)}`}
+                            >
+                              <Check size={14} /> Done
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-              {agenda.length > (view === "due" ? 20 : 5) && (
-                <p className="agenda-more">
-                  +{agenda.length - (view === "due" ? 20 : 5)} more scheduled
-                  tasks. Open a representative to manage dates.
-                </p>
-              )}
-              <footer>
-                <Inbox size={15} />
-                <span>
-                  Reminders appear here while you work.
-                  <br />
-                  You decide when to reach out.
-                </span>
-              </footer>
-            </aside>
-          </div>
-          <div className="page-bottom">
-            <span>
-              <span className="live-dot" />{" "}
-              {error ? "Connection needs attention" : "Connected to Supabase"}
-            </span>
-            <span>Small steps. Strong partnerships.</span>
-          </div>
-        </main>
+                      ))}
+                  </div>
+                )}
+                {agenda.length > (view === "due" ? 20 : 5) && (
+                  <p className="agenda-more">
+                    +{agenda.length - (view === "due" ? 20 : 5)} more scheduled
+                    tasks. Open a representative to manage dates.
+                  </p>
+                )}
+                <footer>
+                  <Inbox size={15} />
+                  <span>
+                    Reminders appear here while you work.
+                    <br />
+                    You decide when to reach out.
+                  </span>
+                </footer>
+              </aside>
+            </div>
+            <div className="page-bottom">
+              <span>
+                <span className="live-dot" />{" "}
+                {error ? "Connection needs attention" : "Connected to Supabase"}
+              </span>
+              <span>Small steps. Strong partnerships.</span>
+            </div>
+          </main>
+        )}
       </div>
       {notice && (
         <div className="toast" role="status">
@@ -1068,6 +1135,20 @@ function Workspace({ user }: { user: User }) {
           </button>
         </div>
       )}
+      {outreach && (
+        <OutreachDialog
+          partner={outreach}
+          onClose={() => setOutreach(null)}
+          onPartnerChange={(updated) => {
+            setPartners((current) =>
+              current.map((item) => (item.id === updated.id ? updated : item)),
+            );
+            setOutreach((current) =>
+              current?.id === updated.id ? updated : current,
+            );
+          }}
+        />
+      )}
       {editing !== undefined && (
         <PartnerForm
           partner={editing}
@@ -1076,6 +1157,14 @@ function Workspace({ user }: { user: User }) {
           onClose={() => setEditing(undefined)}
           onSave={save}
           onDelete={remove}
+          onMessages={
+            editing
+              ? () => {
+                  setOutreach(editing);
+                  setEditing(undefined);
+                }
+              : undefined
+          }
         />
       )}
     </div>
