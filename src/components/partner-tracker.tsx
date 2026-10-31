@@ -18,14 +18,13 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   Clock3,
   Inbox,
   LayoutGrid,
   LoaderCircle,
   LogOut,
   Mail,
-  MoreHorizontal,
+  Pencil,
   MessageSquareText,
   Network,
   Plus,
@@ -544,16 +543,6 @@ function Workspace({
             </button>
           )}
         </nav>
-        <div className="sidebar-tip">
-          <span className="tip-icon">
-            <CircleHelp size={19} />
-          </span>
-          <strong>Good partnerships take time.</strong>
-          <p>A thoughtful follow-up can make all the difference.</p>
-          <button className="text-button" onClick={() => changeView("due")}>
-            See your next steps <ArrowRight size={14} />
-          </button>
-        </div>
         <div className="sidebar-bottom">
           <span className="private-label">
             <ShieldCheck size={15} /> Private workspace
@@ -982,7 +971,7 @@ function Workspace({
                                     aria-label={`Edit ${partner.first_name}`}
                                     onClick={() => setEditing(partner)}
                                   >
-                                    <MoreHorizontal size={19} />
+                                    <Pencil size={17} />
                                   </button>
                                 </div>
                               </td>
