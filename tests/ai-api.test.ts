@@ -177,6 +177,7 @@ test("AI endpoints authenticate, enforce ownership, and save only validated draf
             (message) =>
               message.owner_id === userId &&
               message.partner_id === id &&
+              message.source === "ai" &&
               message.sent_at === null,
           ),
         );

@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   Mail,
   MessageCircle,
+  Pencil,
   Save,
   Sparkles,
   X,
@@ -17,8 +18,11 @@ import { aiRequest } from "@/lib/ai-client";
 import {
   CHANNELS,
   CHANNEL_LABELS,
+  draftSchema,
+  messageGroups,
   messageText,
   type Channel,
+  type MessageKind,
   type PartnerMessage,
 } from "@/lib/outreach";
 import { databaseError, localDate, type Partner } from "@/lib/partners";
@@ -37,9 +41,15 @@ export function OutreachDialog({ partner, onClose, onPartnerChange }: Props) {
   const [history, setHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [composeMode, setComposeMode] = useState<"manual" | "ai">("manual");
+  const [manualKind, setManualKind] = useState<MessageKind>("initial");
+  const [manualSubject, setManualSubject] = useState("");
+  const [manualBody, setManualBody] = useState("");
+  const [savingManual, setSavingManual] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [sentTarget, setSentTarget] = useState<PartnerMessage | null>(null);
+  const composing = generating || savingManual;
 
   useEffect(() => {
     const element = dialog.current;
@@ -96,6 +106,51 @@ export function OutreachDialog({ partner, onClose, onPartnerChange }: Props) {
     }
   }
 
+  async function saveManual(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const draft = draftSchema.safeParse({
+      channel,
+      kind: manualKind,
+      subject: channel === "email" ? manualSubject : "",
+      body: manualBody,
+    });
+    if (!draft.success) {
+      setError(draft.error.issues[0]?.message || "Enter a valid message.");
+      return;
+    }
+    setSavingManual(true);
+    setError("");
+    setNotice("");
+    try {
+      const { data, error } = await getSupabase()
+        .from("partner_messages")
+        .insert({
+          ...draft.data,
+          partner_id: partner.id,
+          owner_id: partner.owner_id,
+          generation_id: crypto.randomUUID(),
+          extra_prompt: "",
+          source: "manual",
+          model: null,
+          sent_at: null,
+        })
+        .select()
+        .single();
+      if (error) throw new Error(databaseError(error));
+      setMessages((current) => [data, ...current]);
+      setManualSubject("");
+      setManualBody("");
+      setHistory(false);
+      setNotice(
+        "Your message is saved as a draft. You can copy it or record it as sent below.",
+      );
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setSavingManual(false);
+    }
+  }
+
   function updated(message: PartnerMessage) {
     setMessages((current) =>
       current.map((item) => (item.id === message.id ? message : item)),
@@ -117,20 +172,13 @@ export function OutreachDialog({ partner, onClose, onPartnerChange }: Props) {
     else if (data) onPartnerChange(data);
   }
 
-  const latestGeneration = messages[0]?.generation_id;
-  const drafts = messages
-    .filter(
-      (message) =>
-        message.generation_id === latestGeneration &&
-        message.channel === channel,
-    )
-    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "initial" ? -1 : 1));
+  const { current: drafts, previous: otherDrafts } = messageGroups(
+    messages,
+    channel,
+  );
   const sentMessages = messages
     .filter((message) => message.sent_at)
     .sort((a, b) => (b.sent_at ?? "").localeCompare(a.sent_at ?? ""));
-  const otherDrafts = messages.filter(
-    (message) => message.generation_id !== latestGeneration && !message.sent_at,
-  );
 
   return (
     <dialog
@@ -139,7 +187,7 @@ export function OutreachDialog({ partner, onClose, onPartnerChange }: Props) {
       aria-labelledby="outreach-title"
       onCancel={(event) => {
         event.preventDefault();
-        if (!generating && !sentTarget) onClose();
+        if (!composing && !sentTarget) onClose();
       }}
     >
       <header className="dialog-header">
@@ -154,7 +202,7 @@ export function OutreachDialog({ partner, onClose, onPartnerChange }: Props) {
         <button
           className="icon-button"
           aria-label="Close messages"
-          disabled={generating || Boolean(sentTarget)}
+          disabled={composing || Boolean(sentTarget)}
           onClick={onClose}
         >
           <X size={21} />
@@ -177,44 +225,171 @@ export function OutreachDialog({ partner, onClose, onPartnerChange }: Props) {
               "Add notes to the partner for more personal drafts."}
           </span>
         </div>
-        <form className="outreach-brief" onSubmit={generate}>
-          <label className="field">
-            <span className="field-label">
-              Your brief <span className="optional">optional</span>
+        <div
+          className="compose-options"
+          role="group"
+          aria-label="How to create your message"
+        >
+          <button
+            type="button"
+            className={composeMode === "manual" ? "selected" : ""}
+            aria-pressed={composeMode === "manual"}
+            disabled={composing}
+            onClick={() => {
+              setComposeMode("manual");
+              setError("");
+            }}
+          >
+            <Pencil size={18} />
+            <span>
+              <strong>Write it yourself</strong>
+              <small>Create your own message for any channel.</small>
             </span>
-            <textarea
-              rows={3}
-              maxLength={4000}
-              value={extraPrompt}
-              onChange={(event) => setExtraPrompt(event.target.value)}
-              disabled={generating}
-              placeholder="Add your company, what you're looking for, sender name, tone, or language. e.g. We're exploring US life insurance lead partnerships. Keep it warm and under 80 words."
-            />
-          </label>
-          <div>
-            <p>
-              Uses saved partner details and this brief. Review factual claims
-              and replace any [placeholders].
-            </p>
-            <button className="primary-button" disabled={generating || loading}>
-              {generating ? (
-                <LoaderCircle className="spin" size={16} />
-              ) : (
-                <Sparkles size={16} />
-              )}
-              {generating
-                ? "Writing drafts…"
-                : messages.length
-                  ? "Generate new versions"
-                  : "Generate messages"}
-            </button>
-          </div>
-        </form>
+          </button>
+          <button
+            type="button"
+            className={composeMode === "ai" ? "selected" : ""}
+            aria-pressed={composeMode === "ai"}
+            disabled={composing}
+            onClick={() => {
+              setComposeMode("ai");
+              setError("");
+            }}
+          >
+            <Sparkles size={18} />
+            <span>
+              <strong>Generate with AI</strong>
+              <small>Use partner details and your optional brief.</small>
+            </span>
+          </button>
+        </div>
+        {composeMode === "manual" ? (
+          <form className="manual-compose" onSubmit={saveManual}>
+            <div className="form-grid">
+              <label className="field">
+                <span className="field-label">Channel</span>
+                <select
+                  value={channel}
+                  disabled={composing}
+                  onChange={(event) => {
+                    setChannel(event.target.value as Channel);
+                    setHistory(false);
+                  }}
+                >
+                  {CHANNELS.map((item) => (
+                    <option key={item} value={item}>
+                      {CHANNEL_LABELS[item]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">Message type</span>
+                <select
+                  value={manualKind}
+                  disabled={composing}
+                  onChange={(event) =>
+                    setManualKind(event.target.value as MessageKind)
+                  }
+                >
+                  <option value="initial">First message</option>
+                  <option value="follow_up">Follow-up</option>
+                </select>
+              </label>
+            </div>
+            {channel === "email" && (
+              <label className="field">
+                <span className="field-label">Subject</span>
+                <input
+                  maxLength={300}
+                  value={manualSubject}
+                  disabled={composing}
+                  onChange={(event) => setManualSubject(event.target.value)}
+                  placeholder="Enter your email subject"
+                />
+              </label>
+            )}
+            <label className="field">
+              <span className="field-label">Message *</span>
+              <textarea
+                rows={5}
+                required
+                maxLength={6000}
+                value={manualBody}
+                disabled={composing}
+                onChange={(event) => setManualBody(event.target.value)}
+                placeholder="Write your message in your own words…"
+              />
+            </label>
+            {channel === "whatsapp" && (
+              <p className="channel-notice">
+                Use WhatsApp only when the recipient has agreed to receive your
+                outreach.
+              </p>
+            )}
+            <div className="manual-compose-footer">
+              <p>
+                Save your draft to edit, copy, or record it as sent. No AI is
+                used.
+              </p>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={composing || loading || !manualBody.trim()}
+              >
+                {savingManual ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : (
+                  <Save size={16} />
+                )}
+                {savingManual ? "Saving…" : "Save message"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form className="outreach-brief" onSubmit={generate}>
+            <label className="field">
+              <span className="field-label">
+                Your brief <span className="optional">optional</span>
+              </span>
+              <textarea
+                rows={3}
+                maxLength={4000}
+                value={extraPrompt}
+                onChange={(event) => setExtraPrompt(event.target.value)}
+                disabled={generating}
+                placeholder="Add your company, what you're looking for, sender name, tone, or language. e.g. We're exploring US life insurance lead partnerships. Keep it warm and under 80 words."
+              />
+            </label>
+            <div>
+              <p>
+                Uses saved partner details and this brief. Review factual claims
+                and replace any [placeholders].
+              </p>
+              <button
+                className="primary-button"
+                disabled={generating || loading}
+              >
+                {generating ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : (
+                  <Sparkles size={16} />
+                )}
+                {generating
+                  ? "Writing drafts…"
+                  : messages.some((message) => message.source === "ai")
+                    ? "Generate new versions"
+                    : "Generate messages"}
+              </button>
+            </div>
+          </form>
+        )}
         <div className="message-navigation">
           <div role="group" aria-label="Message channel">
             {CHANNELS.map((item) => (
               <button
                 key={item}
+                disabled={composing}
                 className={!history && channel === item ? "selected" : ""}
                 onClick={() => {
                   setChannel(item);
@@ -296,11 +471,15 @@ export function OutreachDialog({ partner, onClose, onPartnerChange }: Props) {
             )}
             {drafts.length === 0 ? (
               <div className="message-empty">
-                <Sparkles size={25} />
+                {composeMode === "manual" ? (
+                  <Pencil size={25} />
+                ) : (
+                  <Sparkles size={25} />
+                )}
                 <h3>Make it personal, keep it in your hands.</h3>
                 <p>
-                  Generate an initial message and a follow-up for Email,
-                  LinkedIn, and WhatsApp.
+                  Write your own message above, or generate an initial message
+                  and a follow-up with AI.
                 </p>
               </div>
             ) : (
@@ -403,7 +582,8 @@ function MessageCard({ message, onUpdate, onSent, onError }: CardProps) {
               : "02 · FOLLOW-UP"}
           </span>
           <span className="message-channel">
-            {CHANNEL_LABELS[message.channel]}
+            {CHANNEL_LABELS[message.channel]} ·{" "}
+            {message.source === "manual" ? "Written manually" : "AI-generated"}
           </span>
         </div>
         <span className={isSent ? "sent-badge" : "draft-badge"}>

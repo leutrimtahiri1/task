@@ -55,6 +55,7 @@ export async function POST(request: Request) {
           partner_id: partner.id,
           generation_id: generationId,
           extra_prompt: input.extraPrompt,
+          source: "ai" as const,
           model,
           sent_at: null,
         })),

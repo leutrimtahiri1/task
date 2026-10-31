@@ -19,6 +19,7 @@ test("message ownership, immutable sent snapshots, atomic status updates, and AI
     for (const file of [
       "20261029210000_create_partner_pipeline.sql",
       "20261030010000_partner_messages.sql",
+      "20261031010000_manual_partner_messages.sql",
     ]) {
       await db.exec(
         await readFile(
@@ -151,6 +152,75 @@ test("message ownership, immutable sent snapshots, atomic status updates, and AI
         )
       ).rows[0].status,
       "replied",
+    );
+    const manualPartner = (
+      await db.query<{ id: string }>(
+        "insert into public.partners (first_name) values ('Manual') returning id",
+      )
+    ).rows[0].id;
+    const manualMessage = (
+      await db.query<{ id: string; source: string; model: string | null }>(
+        "insert into public.partner_messages (partner_id, generation_id, channel, kind, body, source) values ($1, gen_random_uuid(), 'email', 'initial', 'My own message', 'manual') returning id, source, model",
+        [manualPartner],
+      )
+    ).rows[0];
+    assert.equal(manualMessage.source, "manual");
+    assert.equal(manualMessage.model, null);
+    assert.equal(
+      (
+        await db.query<{ status: string }>(
+          "select status from public.partners where id = $1",
+          [manualPartner],
+        )
+      ).rows[0].status,
+      "found",
+    );
+    await assert.rejects(
+      db.query(
+        "insert into public.partner_messages (partner_id, generation_id, channel, kind, body, source, model) values ($1, gen_random_uuid(), 'email', 'initial', 'Wrong origin', 'manual', 'test-model')",
+        [manualPartner],
+      ),
+      /check constraint/,
+    );
+    await assert.rejects(
+      db.query(
+        "insert into public.partner_messages (partner_id, generation_id, channel, kind, body, source) values ($1, gen_random_uuid(), 'email', 'initial', 'Missing model', 'ai')",
+        [manualPartner],
+      ),
+      /check constraint/,
+    );
+    await db.query(
+      "select public.record_partner_message_sent($1, 'My subject', 'My final message', now(), current_date)",
+      [manualMessage.id],
+    );
+    assert.equal(
+      (
+        await db.query<{ status: string }>(
+          "select status from public.partners where id = $1",
+          [manualPartner],
+        )
+      ).rows[0].status,
+      "contacted",
+    );
+    await assert.rejects(
+      db.query(
+        "update public.partner_messages set body = 'Change sent manual message' where id = $1",
+        [manualMessage.id],
+      ),
+      /read-only/,
+    );
+    // Writing and recording manual messages never invokes the AI budget function.
+    await db.exec("reset role");
+    assert.equal(
+      (
+        await db.query<{ count: number }>(
+          "select count(*)::int as count from public.ai_request_log",
+        )
+      ).rows[0].count,
+      0,
+    );
+    await db.exec(
+      `set role authenticated; select set_config('request.jwt.claim.sub', '${owner}', false);`,
     );
     for (let count = 0; count < 5; count++)
       await db.query("select public.claim_ai_request('search')");

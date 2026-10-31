@@ -135,10 +135,22 @@ shadow root; model-written HTML is never executed.
 ## Generate and record outreach
 
 On a representative's row, click **Messages**, or open their edit form and
-choose **Messages** there. Add an optional brief with your company, sender
-name, partnership goals, language, tone, and any extra instructions. The app
-generates and saves six drafts: an initial message and one follow-up for each
-of Email, LinkedIn, and WhatsApp. Email drafts include a subject line.
+choose **Messages** there. Choose how to create your message:
+
+- **Write it yourself** (default): choose Email, LinkedIn, or WhatsApp, select
+  First message or Follow-up, and write your text. Email also has a subject.
+  **Save message** creates a draft using Supabase directly. This works without
+  a Gemini key and does not use AI quota.
+- **Generate with AI**: add an optional brief with your company, sender name,
+  partnership goals, language, tone, and any extra instructions. The app
+  generates and saves six drafts: an initial message and one follow-up for
+  each channel.
+
+Both types can be edited, copied, and recorded as sent. The database stores
+`source` as `manual` or `ai`; manual messages have no model value. Existing
+messages are classified as AI-created by the migration. Unsent manual drafts
+remain visible in their channel alongside the latest AI batch, while older AI
+batches remain under History.
 
 Only saved partner facts relevant to personalization (name, company, role,
 stage, contact origin/method, outcome, and notes) plus your brief go to Gemini.

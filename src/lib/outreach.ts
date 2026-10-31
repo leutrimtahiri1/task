@@ -22,7 +22,8 @@ export type PartnerMessage = Draft & {
   partner_id: string;
   generation_id: string;
   extra_prompt: string;
-  model: string;
+  source: "ai" | "manual";
+  model: string | null;
   sent_at: string | null;
   created_at: string;
 };
@@ -38,6 +39,30 @@ export const messagePlanSchema = z.object({
       "Expected one initial and one follow-up for each channel.",
     ),
 });
+
+export function messageGroups(messages: PartnerMessage[], channel: Channel) {
+  // Adding a manual draft must not hide the latest six-message AI batch.
+  const latestAiGeneration = messages.find(
+    (message) => message.source === "ai",
+  )?.generation_id;
+  return {
+    current: messages
+      .filter(
+        (message) =>
+          message.channel === channel &&
+          (message.source === "manual"
+            ? message.sent_at === null
+            : message.generation_id === latestAiGeneration),
+      )
+      .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "initial" ? -1 : 1)),
+    previous: messages.filter(
+      (message) =>
+        message.source === "ai" &&
+        message.generation_id !== latestAiGeneration &&
+        !message.sent_at,
+    ),
+  };
+}
 
 export const searchInputSchema = z.object({
   query: z.string().trim().min(3).max(600),

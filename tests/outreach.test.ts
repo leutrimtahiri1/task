@@ -8,12 +8,63 @@ import {
 } from "../src/lib/ai-contract";
 import {
   messagePlanSchema,
+  messageGroups,
   messageText,
   safeWebUrl,
   searchInputSchema,
   sentInputSchema,
+  type PartnerMessage,
 } from "../src/lib/outreach";
 import { EMPTY_PARTNER, type Partner } from "../src/lib/partners";
+
+test("manual drafts coexist with the latest AI batch and keep prior versions accessible", () => {
+  const make = (
+    id: string,
+    source: "manual" | "ai",
+    generation: string,
+    channel: PartnerMessage["channel"] = "email",
+    sent = false,
+  ): PartnerMessage => ({
+    id,
+    source,
+    generation_id: generation,
+    channel,
+    kind: "initial",
+    subject: "",
+    body: "Draft",
+    owner_id: "owner",
+    partner_id: "partner",
+    extra_prompt: "",
+    model: source === "ai" ? "test-model" : null,
+    sent_at: sent ? "2026-10-31T10:00:00Z" : null,
+    created_at: "2026-10-31T09:00:00Z",
+  });
+  const messages = [
+    make("manual-new", "manual", "manual-1"),
+    make("ai-new", "ai", "ai-2"),
+    make("ai-chat", "ai", "ai-2", "linkedin"),
+    make("manual-old", "manual", "manual-2"),
+    make("ai-old", "ai", "ai-1"),
+    make("manual-sent", "manual", "manual-3", "email", true),
+  ];
+  const groups = messageGroups(messages, "email");
+  assert.deepEqual(
+    groups.current.map((message) => message.id),
+    ["manual-new", "ai-new", "manual-old"],
+  );
+  assert.deepEqual(
+    groups.previous.map((message) => message.id),
+    ["ai-old"],
+  );
+  assert.deepEqual(
+    messageGroups(messages, "linkedin").current.map((message) => message.id),
+    ["ai-chat"],
+  );
+  assert.deepEqual(
+    messageGroups([messages[0]], "email").current.map((message) => message.id),
+    ["manual-new"],
+  );
+});
 
 const partner: Partner = {
   ...EMPTY_PARTNER,
